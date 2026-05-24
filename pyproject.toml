@@ -1,0 +1,23 @@
+[project]
+name = "rl2"
+version = "0.1.0"
+description = "Reinforcement Learning algorithms implemented in functional JAX."
+requires-python = ">=3.11"
+dependencies = [
+    "jax>=0.4.30",
+    "gymnasium>=1.2.0",
+    "pygame>=2.6.0",
+    "matplotlib>=3.9.0",
+]
+
+[project.scripts]
+rl2-vi-pi = "rl2.scripts.evaluate_vi_pi:main"
+rl2-model-free = "rl2.scripts.evaluate_model_free:main"
+rl2-cartpole = "rl2.scripts.evaluate_cartpole:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rl2"]
