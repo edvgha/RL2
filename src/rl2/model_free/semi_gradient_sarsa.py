@@ -101,11 +101,11 @@ def fit_semi_gradient_sarsa(
         total_reward = 0.0
         steps = 0
 
-        key, action_key = jax.random.split(key)
+        key, key_e, key_a = jax.random.split(key, 3)
         feat = _state_feature(jnp.asarray(state, dtype=jnp.float32),
                               _OBS_LOW, _OBS_HIGH, n_bins_arr, multipliers)
-        explore = jax.random.uniform(action_key) < eps_a
-        rand_a = jax.random.randint(action_key, (), 0, n_actions)
+        explore = jax.random.uniform(key_e) < eps_a
+        rand_a = jax.random.randint(key_a, (), 0, n_actions)
         greedy_a = jnp.argmax(W[feat])
         action = int(jnp.where(explore, rand_a, greedy_a))
 
