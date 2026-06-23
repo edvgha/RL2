@@ -22,24 +22,24 @@ class Algorithm(Enum):
 
 
 def extract_mdp_from_gym_env(env: gym.Env) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    """Pull (P, R) out of env.unwrapped.P; returns JAX arrays."""
+    """Pull (P, R) out of env.unwrapped.P"""
     inner = env.unwrapped
-    n_states = inner.observation_space.n
-    n_actions = inner.action_space.n
+    n_states = inner.observation_space.n # type: ignore
+    n_actions = inner.action_space.n # type: ignore
 
     P = np.zeros((n_states, n_actions, n_states), dtype=np.float32)
     R = np.zeros((n_states, n_actions), dtype=np.float32)
     for s in range(n_states):
         for a in range(n_actions):
-            for prob, s_next, reward, _ in inner.P[s][a]:
+            for prob, s_next, reward, _ in inner.P[s][a]: # type: ignore
                 P[s, a, s_next] += prob
-                R[s, a] += prob * reward
+                R[s, a] += prob * reward # expected reward
     return jnp.asarray(P), jnp.asarray(R)
 
 
 def evaluate(env_func: Callable[[], EnvPair], alg: Algorithm) -> None:
     env, env_h = env_func()
-    print(f"\n[*] Env: {env.spec.id} | Alg: {alg.value}")
+    print(f"\n[*] Env: {env.spec.id} | Alg: {alg.value}") # type: ignore
 
     P, R = extract_mdp_from_gym_env(env)
     env.close()

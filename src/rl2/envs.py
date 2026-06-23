@@ -27,8 +27,8 @@ def frozen_lake_env(is_slippery: bool = True) -> EnvPair:
     """Two FrozenLake-v1 instances: headless for training, human-rendered for rollout."""
     kwargs = dict(is_slippery=is_slippery, desc=_FROZEN_LAKE_MAP, success_rate=0.9)
     return (
-        gym.make("FrozenLake-v1", render_mode=None, **kwargs),
-        gym.make("FrozenLake-v1", render_mode="human", **kwargs),
+        gym.make("FrozenLake-v1", render_mode=None, **kwargs), # type: ignore
+        gym.make("FrozenLake-v1", render_mode="human", **kwargs), # type: ignore
     )
 
 
