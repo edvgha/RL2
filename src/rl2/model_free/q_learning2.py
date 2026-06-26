@@ -30,6 +30,8 @@ class QLearning:
 
         self._parse_env(env)
 
+        self.state_values = np.zeros(self.num_states, dtype=float)
+
     def _parse_env(self, env: gym.Env):
         # 1. Verify space compatibility
         if not isinstance(env.observation_space, gym.spaces.Discrete):
@@ -69,6 +71,18 @@ class QLearning:
         for s in range(self.num_states):
             optimal_policy[s] = np.argmax(q[s, :])
         return optimal_policy
+    
+    def _extract_state_values(self, q: np.ndarray) -> np.ndarray:
+        """
+        q (np.ndarray): State-action value matrix. Shape: (num_states, num_actions)
+
+        Returns:
+            state_values (np.ndarray): The maximum value for each state V(s) = max_a Q(s, a). Shape: (num_states,)
+        """
+        
+        for s in range(self.num_states):
+            self.state_values[s] = np.max(q[s, :])
+        return self.state_values
 
     def __call__(self) -> np.ndarray:
         """
@@ -129,5 +143,6 @@ class QLearning:
         print(f"Q-Learning optimization algorithm completed execution after {k} episodes.")
         
         optimal_policy = self._extract_optimal_policy(q)
+        self._extract_state_values(q)
             
         return optimal_policy

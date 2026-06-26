@@ -40,6 +40,8 @@ class Sarsa:
 
         self._parse_env(env)
 
+        self.state_values = np.zeros(self.num_states, dtype=float)
+
     def _parse_env(self, env: gym.Env):
         # 1. Verify space compatibility
         if not isinstance(env.observation_space, gym.spaces.Discrete):
@@ -66,6 +68,18 @@ class Sarsa:
                 # \pi_{t+1}(a|s_t) = \epsilon / |A(s_t)|
                 pi[s, a] = self.epsilon / num_A
         return pi
+    
+    def _extract_state_values(self, q: np.ndarray) -> np.ndarray:
+        """
+        q (np.ndarray): State-action value matrix. Shape: (num_states, num_actions)
+
+        Returns:
+            state_values (np.ndarray): The maximum value for each state V(s) = max_a Q(s, a). Shape: (num_states,)
+        """
+        
+        for s in range(self.num_states):
+            self.state_values[s] = np.max(q[s, :])
+        return self.state_values
 
     def _extract_optimal_policy(self, q: np.ndarray) -> np.ndarray:
         """
@@ -124,7 +138,6 @@ class Sarsa:
                 future_val = 0.0 if terminated else q[s_tp1, a_tp1]
 
                 if self.esarsa:
-                    print("valod")
                     future_val = 0.0 if terminated else float(np.dot(pi[s_tp1, :], q[s_tp1, :]))
 
                 q[s_t, a_t] = q[s_t, a_t] - self.alpha * (q[s_t, a_t] - (float(r_tp1) + self.gamma * future_val))
@@ -150,5 +163,6 @@ class Sarsa:
         print(f"Sarsa optimization algorithm completed execution after {k} episodes.")
         
         optimal_policy = self._extract_optimal_policy(q)
+        self._extract_state_values(q)
             
         return optimal_policy

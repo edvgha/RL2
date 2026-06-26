@@ -18,7 +18,7 @@ _FROZEN_LAKE_MAP = [
     "HFFFFHFF",
     "FFFFFFFF",
     "FHHFFFFF",
-    "FHFFFFFF",
+    "FHFFFFFH",
     "FFFHFFFG",
 ]
 

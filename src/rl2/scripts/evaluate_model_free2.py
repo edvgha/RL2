@@ -53,6 +53,63 @@ def plot_metrics(stats: dict, alg_name: str, env_name: str) -> None:
     plt.close()
 
 
+def plot_state_values(values: np.ndarray, alg_name: str, env_name: str, dims: list) -> None:
+    fig = plt.figure(figsize=(12, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    
+    # Reshape the 1D values array to match the 2D grid layout dimensions[cite: 8]
+    grid_values = values.reshape(dims[1], dims[0])
+    
+    # Create matching X and Y coordinate meshgrid matrices
+    x = np.arange(dims[0])
+    y = np.arange(dims[1])
+    X, Y = np.meshgrid(x, y)
+    
+    # Generate the 3D surface plot
+    surf = ax.plot_surface(X, Y, grid_values, cmap='viridis', edgecolor='none', alpha=0.7)
+    
+    # --- TEXT VALUE ANNOTATIONS ---
+    # Loop through every grid intersection coordinate point
+    for r in range(dims[1]):
+        for c in range(dims[0]):
+            val = grid_values[r, c]
+            
+            # Slightly offset the text on the Z-axis so it floats cleanly above the surface points
+            # Adjust the multiplier (0.02) if your environment rewards scale radically
+            z_offset = max(0.01, abs(val) * 0.02) if val != 0 else 0.01
+            
+            ax.text(
+                x=c, 
+                y=r, 
+                z=val + z_offset, 
+                s=f"{val:.2f}", 
+                color='black', 
+                fontsize=8,
+                ha='center', 
+                va='bottom',
+                bbox=dict(boxstyle='round,pad=0.2', facecolor='white', edgecolor='none', alpha=0.6)
+            )
+    # ------------------------------
+
+    # Camera & axis viewing layout parameters
+    ax.view_init(elev=30, azim=-135)
+    ax.tick_params(axis='x', rotation=15)
+
+    # Labels and Titles
+    ax.set_xlabel('X Axis (Columns)')
+    ax.set_ylabel('Y Axis (Rows)')
+    ax.set_zlabel('State Value V(s)')
+    ax.set_title(f"{alg_name} 3D State-Value Function with Point Labels ({env_name})")
+    
+    # Add a color bar map to easily identify peak values
+    fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5, label='Value Magnitude')
+    
+    plt.tight_layout()
+    plt.show(block=False)
+    plt.pause(5)
+    plt.close()
+
+
 def evaluate(
     env_func: Callable[[], EnvPair],
     control: Control,
@@ -62,19 +119,22 @@ def evaluate(
     env_id = getattr(env.spec, "id", "UnknownEnv")
     print(f"\n[*] Env: {env_id} | Alg: {control.value}") # type: ignore
 
-    optimal_policy, stats = np.array([]), {}
+    optimal_policy, stats, state_values = np.array([]), {}, np.array([])
     if control == Control.SARSA:
         sarsa_solver = Sarsa(env, max_episodes=episodes, use_esarsa=False)
         optimal_policy = sarsa_solver()
         stats = sarsa_solver.stats
+        state_values = sarsa_solver.state_values
     elif control == Control.ESARSA:
         sarsa_solver = Sarsa(env, max_episodes=episodes, use_esarsa=True)
         optimal_policy = sarsa_solver()
         stats = sarsa_solver.stats
+        state_values = sarsa_solver.state_values
     elif control == Control.QLEARNING:
         q_learning_solver = QLearning(env, max_episodes=episodes)
         optimal_policy = q_learning_solver()
         stats = q_learning_solver.stats
+        state_values = q_learning_solver.state_values
     env.close()
 
     state, _ = env_h.reset()
@@ -92,12 +152,13 @@ def evaluate(
     env_h.close()
 
     plot_metrics(stats, control.value, env_id)
+    plot_state_values(state_values, control.value, env_id, [8, 8])
 
 
 def main() -> None:
-    evaluate(frozen_lake_s_env, Control.SARSA, episodes=3000)
-    evaluate(frozen_lake_s_env, Control.ESARSA, episodes=3000)
-    evaluate(frozen_lake_s_env, Control.QLEARNING, episodes=1500)
+    evaluate(frozen_lake_s_env, Control.SARSA, episodes=2000)
+    evaluate(frozen_lake_s_env, Control.ESARSA, episodes=2000)
+    evaluate(frozen_lake_s_env, Control.QLEARNING, episodes=2000)
 
 
 if __name__ == "__main__":
