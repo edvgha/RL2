@@ -19,13 +19,15 @@ from rl2.envs import (
 )
 from rl2.value_approximation.sarsa_q_value_approximation import SarsaFuncApprox
 from rl2.value_approximation.q_learning_q_value_approximation import QLearningFuncApprox
+from rl2.value_approximation.deep_q_learning_off_policy import DeepQLearningUniformBehavior
 
 warnings.filterwarnings("ignore")
 
 
 class Control(Enum):
     QLEARNING = "Q-Learning"
-    SARSA = "SARSA"
+    DEEP_QLEARNING_OFF_POLICY = "Deep-Q-Learning-Off-Policy"
+    SARSA = "SARSA"    
 
 
 def plot_metrics(stats: dict, alg_name: str, env_name: str) -> None:
@@ -130,6 +132,10 @@ def evaluate(
         q_learning_solver = QLearningFuncApprox(env, dims=dims, num_features=10, max_episodes=episodes)
         optimal_policy, state_values = q_learning_solver()
         stats = q_learning_solver.stats
+    elif control == Control.DEEP_QLEARNING_OFF_POLICY:
+        deep_q_learning_solver = DeepQLearningUniformBehavior(env, dims=dims, num_features=10, max_episodes=episodes)
+        optimal_policy, state_values = deep_q_learning_solver()
+        stats = deep_q_learning_solver.stats
 
     env.close()
 
@@ -153,7 +159,8 @@ def evaluate(
 
 def main() -> None:
     # evaluate(frozen_lake_s_env, Control.SARSA, episodes=3000, dims=[8, 8])
-    evaluate(frozen_lake_s_env, Control.QLEARNING, episodes=3000, dims=[8, 8])
+    # evaluate(frozen_lake_s_env, Control.QLEARNING, episodes=3000, dims=[8, 8])
+    evaluate(frozen_lake_s_env, Control.DEEP_QLEARNING_OFF_POLICY, episodes=3000, dims=[8, 8])
 
 
 if __name__ == "__main__":
