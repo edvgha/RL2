@@ -17,8 +17,8 @@ from rl2.envs import (
     frozen_lake_d_small_env,
     taxi_env,
 )
-from rl2.model_free.sarsa2 import Sarsa
-from rl2.model_free.q_learning2 import QLearning
+from rl2.value_approximation.sarsa_q_value_approximation import SarsaFuncApprox
+from rl2.value_approximation.q_learning_q_value_approximation import QLearningFuncApprox
 
 warnings.filterwarnings("ignore")
 
@@ -26,7 +26,6 @@ warnings.filterwarnings("ignore")
 class Control(Enum):
     QLEARNING = "Q-Learning"
     SARSA = "SARSA"
-    ESARSA = "Expected-SARSA"
 
 
 def plot_metrics(stats: dict, alg_name: str, env_name: str) -> None:
@@ -124,20 +123,14 @@ def evaluate(
 
     optimal_policy, stats, state_values = np.array([]), {}, np.array([])
     if control == Control.SARSA:
-        sarsa_solver = Sarsa(env, max_episodes=episodes, use_esarsa=False)
-        optimal_policy = sarsa_solver()
-        stats = sarsa_solver.stats
-        state_values = sarsa_solver.state_values
-    elif control == Control.ESARSA:
-        sarsa_solver = Sarsa(env, max_episodes=episodes, use_esarsa=True)
-        optimal_policy = sarsa_solver()
-        stats = sarsa_solver.stats
-        state_values = sarsa_solver.state_values
+        sarsa_func_approx_solver = SarsaFuncApprox(env, dims=dims, num_features=10, max_episodes=episodes)
+        optimal_policy, state_values = sarsa_func_approx_solver()
+        stats = sarsa_func_approx_solver.stats
     elif control == Control.QLEARNING:
-        q_learning_solver = QLearning(env, max_episodes=episodes)
-        optimal_policy = q_learning_solver()
+        q_learning_solver = QLearningFuncApprox(env, dims=dims, num_features=10, max_episodes=episodes)
+        optimal_policy, state_values = q_learning_solver()
         stats = q_learning_solver.stats
-        state_values = q_learning_solver.state_values
+
     env.close()
 
     state, _ = env_h.reset()
@@ -159,13 +152,8 @@ def evaluate(
 
 
 def main() -> None:
-    #evaluate(frozen_lake_s_env, Control.SARSA, episodes=2000)
-    #evaluate(frozen_lake_s_env, Control.ESARSA, episodes=2000)
-    evaluate(frozen_lake_s_env, Control.QLEARNING, episodes=2000, dims=[8, 8])
-
-    # evaluate(frozen_lake_d_small_env, Control.QLEARNING, episodes=3000, dims=[5, 5])
-    #evaluate(frozen_lake_s_small_env, Control.ESARSA, episodes=3000, dims=[5, 5])
-    #evaluate(frozen_lake_s_small_env, Control.SARSA, episodes=3000, dims=[5, 5])
+    # evaluate(frozen_lake_s_env, Control.SARSA, episodes=3000, dims=[8, 8])
+    evaluate(frozen_lake_s_env, Control.QLEARNING, episodes=3000, dims=[8, 8])
 
 
 if __name__ == "__main__":

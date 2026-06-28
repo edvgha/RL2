@@ -11,14 +11,50 @@ import gymnasium as gym
 
 EnvPair = Tuple[gym.Env, gym.Env]
 
+_FROZEN_LAKE_SMALL_MAP = [
+    "FFFFF",
+    "FHHFF",
+    "FFHFF",
+    "FHGHF",
+    "FHFFF"
+]
+
+
+def frozen_lake_small_env(is_slippery: bool = True) -> EnvPair:
+    """Two FrozenLake-v1 instances: headless for training, human-rendered for rollout."""
+    kwargs = dict(is_slippery=is_slippery, desc=_FROZEN_LAKE_SMALL_MAP, success_rate=0.9)
+    return (
+        gym.make("FrozenLake-v1", render_mode=None, **kwargs), # type: ignore
+        gym.make("FrozenLake-v1", render_mode="human", **kwargs), # type: ignore
+    )
+
+
+def frozen_lake_d_small_env() -> EnvPair:
+    return frozen_lake_small_env(is_slippery=False)
+
+
+def frozen_lake_s_small_env() -> EnvPair:
+    return frozen_lake_small_env(is_slippery=True)
+
+# _FROZEN_LAKE_MAP = [
+#     "SFFFFFFF",
+#     "FFFFFFFF",
+#     "FFFHFFFF",
+#     "HFFFFHFF",
+#     "FFFFFFFF",
+#     "FHHFFFFF",
+#     "FHFFFFFH",
+#     "FFFHFFFG",
+# ]
+
 _FROZEN_LAKE_MAP = [
     "SFFFFFFF",
     "FFFFFFFF",
-    "FFFHFFFF",
+    "FFFFFFFF",
     "HFFFFHFF",
     "FFFFFFFF",
     "FHHFFFFF",
-    "FHFFFFFH",
+    "FHFFFFFF",
     "FFFHFFFG",
 ]
 
