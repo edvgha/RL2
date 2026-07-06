@@ -1,43 +1,54 @@
-# RL2: Reinforcement Learning Algorithms in JAX
+# RL2: Reinforcement Learning Algorithms
 
-Classic tabular and linear-features Reinforcement Learning algorithms,
-implemented in functional [JAX](https://jax.readthedocs.io/) and exercised
-on [Gymnasium](https://gymnasium.farama.org/) toy environments.
+Classic tabular and deep Reinforcement Learning algorithms, implemented in pure Python (NumPy) and [PyTorch](https://pytorch.org/), and exercised on [Gymnasium](https://gymnasium.farama.org/) toy environments.
 
-Per-step TD updates and the model-based fixed-point iterations are pure
-jit-compiled functions; the per-episode loop stays in Python because
-Gymnasium's `env.step` is not JAX-pure.
+The tabular methods and linear-feature algorithms leverage standard NumPy for efficient TD updates and fixed-point iterations. The deep reinforcement learning algorithms (Deep Q-Learning, REINFORCE, Actor-Critic) utilize PyTorch to implement deep neural networks for robust function approximation.
 
 ## Algorithms
 
-| Family       | Algorithm                       | Module                                                                    |
-| ------------ | ------------------------------- | ------------------------------------------------------------------------- |
-| Model-based  | Value Iteration                 | [src/rl2/model_based/value_iteration.py](src/rl2/model_based/value_iteration.py)         |
-| Model-based  | Policy Iteration                | [src/rl2/model_based/policy_iteration.py](src/rl2/model_based/policy_iteration.py)       |
-| Model-free   | Q-Learning, Double-Q-Learning   | [src/rl2/model_free/q_learning.py](src/rl2/model_free/q_learning.py)                     |
-| Model-free   | SARSA, Expected SARSA           | [src/rl2/model_free/sarsa.py](src/rl2/model_free/sarsa.py)                               |
-| Approximate  | Semi-gradient linear SARSA      | [src/rl2/model_free/semi_gradient_sarsa.py](src/rl2/model_free/semi_gradient_sarsa.py)   |
+| Family                 | Algorithm                       | Module                                                                                                 |
+| ---------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **Model-based** | Value Iteration                 | [src/rl2/model_based/value_iteration.py](src/rl2/model_based/value_iteration.py)                       |
+| **Model-based** | Policy Iteration                | [src/rl2/model_based/policy_iteration.py](src/rl2/model_based/policy_iteration.py)                     |
+| **Model-free** | Q-Learning, Double-Q-Learning   | [src/rl2/model_free/q_learning.py](src/rl2/model_free/q_learning.py)                                   |
+| **Model-free** | SARSA, Expected SARSA           | [src/rl2/model_free/sarsa.py](src/rl2/model_free/sarsa.py)                                             |
+| **Linear Approx** | Semi-gradient linear SARSA      | [src/rl2/model_free/semi_gradient_sarsa.py](src/rl2/model_free/semi_gradient_sarsa.py)                 |
+| **Value Approx (DNN)** | SARSA, Q-Learning, Off-Pol DQN  | [src/rl2/value_approximation/](src/rl2/value_approximation/)                                           |
+| **Policy Gradient** | REINFORCE                       | [src/rl2/policy_approximation/reinforce.py](src/rl2/policy_approximation/reinforce.py)                 |
+| **Actor-Critic** | QAC, A2C, Off-Policy A2C        | [src/rl2/actor_critic/](src/rl2/actor_critic/)                                                         |
 
-Each module's docstring carries the pseudocode and Bellman/TD update
-formulas in `Σ / γ / α / ε` notation.
+Each module's docstring or paired Jupyter notebook carries the pseudocode and Bellman/TD update formulas.
 
 ## Project layout
 
-```
+```text
 src/rl2/
-├── envs.py                       # Gym env factories (FrozenLake, CliffWalking, Taxi, CartPole)
-├── model_based/
+├── envs.py                         # Gym env factories (FrozenLake, CartPole, etc.)
+├── model_based/                    # Tabular Planners
 │   ├── value_iteration.py
 │   └── policy_iteration.py
-├── model_free/
-│   ├── exploration.py            # ε-greedy + ε decay schedule
-│   ├── q_learning.py             # Q-Learning + Double-Q-Learning
-│   ├── sarsa.py                  # SARSA + Expected SARSA
-│   └── semi_gradient_sarsa.py    # Linear SARSA with state aggregation (CartPole)
-└── scripts/
-    ├── evaluate_vi_pi.py         # VI / PI on FrozenLake + Taxi
-    ├── evaluate_model_free.py    # Q / Double-Q / SARSA / E-SARSA on FrozenLake
-    └── evaluate_cartpole.py      # Semi-gradient linear SARSA on CartPole
+├── model_free/                     # Tabular RL
+│   ├── exploration.py              # ε-greedy + ε decay schedule
+│   ├── q_learning.py               
+│   ├── sarsa.py                    
+│   └── semi_gradient_sarsa.py      
+├── value_approximation/            # PyTorch Deep Value Methods
+│   ├── sarsa_q_value_approximation.py
+│   ├── q_learning_q_value_approximation.py
+│   └── deep_q_learning_off_policy.py
+├── policy_approximation/           # PyTorch Policy Gradients
+│   └── reinforce.py
+├── actor_critic/                   # PyTorch Actor-Critic Methods
+│   ├── qac.py
+│   ├── a2c.py
+│   └── off_policy_a2c.py
+└── scripts/                        # Execution & Evaluation scripts
+    ├── evaluate_vi_pi.py           
+    ├── evaluate_model_free.py      
+    ├── evaluate_cartpole.py        
+    ├── evaluate_value_approximation.py
+    ├── evaluate_reinforce.py
+    └── evaluate_actor_critic.py
 ```
 
 ## Setup
@@ -60,29 +71,32 @@ The package exposes three console scripts:
 ```bash
 uv run rl2-vi-pi          # Value Iteration & Policy Iteration on FrozenLake / Taxi
 uv run rl2-model-free     # Q / Double-Q / SARSA / Expected-SARSA on slippery FrozenLake
-uv run rl2-cartpole       # Semi-gradient linear SARSA on CartPole-v1
-```
 
-Each script trains headless, then rolls out the greedy policy in a
-human-rendered Gymnasium window (CartPole prints a scatter plot of the
-reward curve instead).
+uv run python -m rl2.scripts.evaluate_value_approximation
+uv run python -m rl2.scripts.evaluate_reinforce
+uv run python -m rl2.scripts.evaluate_actor_critic
+```
 
 ## Library usage
 
 ```python
-import jax.numpy as jnp
-from rl2.model_based.value_iteration import value_iteration
+import numpy as np
+import gymnasium as gym
 from rl2.model_free.q_learning import QLearningType, fit_q_learning
 
-# Model-based: given a known MDP (P, R)
-V, policy, converged = value_iteration(P, R, gamma=0.9, theta=1e-6)
-
-# Model-free: given a Gymnasium env
-import gymnasium as gym
 env = gym.make("FrozenLake-v1", is_slippery=True)
 Q, policy, history = fit_q_learning(
     env, QLearningType.QLEARNING,
     episodes=3000, alpha=0.1, gamma=0.99,
     epsilon=1.0, epsilon_min=0.1, decay_rate=1e-4, seed=0,
 )
+```
+
+```python
+import gymnasium as gym
+from rl2.actor_critic.a2c import A2C
+
+env = gym.make("FrozenLake-v1", is_slippery=False)
+agent = A2C(env, dims=[8, 8], gamma=0.9, alpha_theta=0.001, alpha_w=0.001)
+optimal_policy, state_values = agent()
 ```
