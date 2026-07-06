@@ -51,7 +51,8 @@ class A2C:
                  alpha_theta=0.001,
                  alpha_w=0.001,
                  max_episodes=5000, 
-                 max_steps_per_episode=500):
+                 max_steps_per_episode=500, 
+                 use_one_hot_features=False):
         """
         Args:
             env (gym.Env): A Gymnasium environment (Discrete state and action spaces).
@@ -63,12 +64,14 @@ class A2C:
             alpha_w (float): Learning rate for Critic's PyTorch optimizer.
             max_episodes (int): Total number of episodes to process.
             max_steps_per_episode (int): Maximum length of a single generated episode.
+            use_one_hot_features (bool): if True use one-hot encoding for actor/critic input
         """
         self.gamma = gamma
         self.alpha_theta = alpha_theta
         self.alpha_w = alpha_w
         self.max_episodes = max_episodes
         self.max_steps_per_episode = max_steps_per_episode
+        self.use_one_hot_features = use_one_hot_features
         
         self.dims = dims 
 
@@ -78,6 +81,10 @@ class A2C:
         }
 
         self._parse_env(env)
+
+        if use_one_hot_features:
+            num_actor_features = self.num_states + self.num_actions
+            num_critic_features = self.num_states
         
         # Initialize Actor (\theta) and Critic (w) networks
         self.actor_net = ActorNetwork(num_actor_features)
@@ -97,13 +104,45 @@ class A2C:
         self.num_states = int(env.observation_space.n) # type: ignore
         self.num_actions = int(env.action_space.n) # type: ignore
 
+    def _get_actor_features(self, state: int, action: int) -> np.ndarray:
+        if self.use_one_hot_features:
+            return self._get_actor_features_one_hot(state, action)
+        return self._get_actor_features_quadratic(state, action)
+
+    def _get_critic_features(self, state: int) -> np.ndarray:
+        if self.use_one_hot_features:
+            return self._get_critic_features_one_hot(state)
+        return self._get_critic_features_quadratic(state)
+
+    def _get_actor_features_one_hot(self, state: int, action: int) -> np.ndarray:
+        """
+        Constructs a One-Hot encoded feature vector for the (state, action) pair.
+        Outputs a concatenation of [State Vector] + [Action Vector]
+        """
+        state_vec = np.zeros(self.num_states, dtype=float)
+        state_vec[state] = 1.0
+        
+        action_vec = np.zeros(self.num_actions, dtype=float)
+        action_vec[action] = 1.0
+        
+        return np.concatenate([state_vec, action_vec])
+
+    def _get_critic_features_one_hot(self, state: int) -> np.ndarray:
+        """
+        Constructs a pure One-Hot encoded state feature vector for v(s, w).
+        """
+        state_vec = np.zeros(self.num_states, dtype=float)
+        state_vec[state] = 1.0
+        
+        return state_vec
+
     def _state_to_xy(self, state: int) -> Tuple[float, float]:
         """Maps a 1D state ID to discrete (x, y) coordinates."""
         y = float(state // self.dims[0])
         x = float(state % self.dims[0])
         return x, y
     
-    def _get_actor_features(self, state: int, action: int) -> np.ndarray:
+    def _get_actor_features_quadratic(self, state: int, action: int) -> np.ndarray:
         """Constructs the feature vector for (s, a) preferences: [1, x, y, a, x^2, y^2, a^2, xy, xa, ya]"""
         raw_x, raw_y = self._state_to_xy(state)
         
@@ -122,7 +161,7 @@ class A2C:
         
         return features
 
-    def _get_critic_features(self, state: int) -> np.ndarray:
+    def _get_critic_features_quadratic(self, state: int) -> np.ndarray:
         """Constructs the pure state feature vector for v(s, w): [1, x, y, x^2, y^2, xy]"""
         raw_x, raw_y = self._state_to_xy(state)
         

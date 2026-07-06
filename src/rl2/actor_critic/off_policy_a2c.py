@@ -44,7 +44,6 @@ class CriticNetwork(nn.Module):
 class OffPolicyA2C:
     def __init__(self, 
                  env: gym.Env, 
-                 dims: List[int],
                  gamma=0.9, 
                  alpha_theta=0.001,  
                  alpha_w=0.001,      
@@ -53,7 +52,6 @@ class OffPolicyA2C:
         """
         Args:
             env (gym.Env): A Gymnasium environment (Discrete state and action spaces).
-            dims (List[int]): [width, height] describing grid axes bounds.
             gamma (float): Discount factor for future rewards.
             alpha_theta (float): Learning rate for Actor's PyTorch optimizer.
             alpha_w (float): Learning rate for Critic's PyTorch optimizer.
@@ -65,7 +63,6 @@ class OffPolicyA2C:
         self.alpha_w = alpha_w
         self.max_episodes = max_episodes
         self.max_steps_per_episode = max_steps_per_episode
-        self.dims = dims 
 
         self.stats = {
             "total_rewards": [],
@@ -75,12 +72,13 @@ class OffPolicyA2C:
         self._parse_env(env)
         
         # Determine feature vector sizes based on one-hot encoding lengths
-        self.num_critic_features = self.num_states
-        self.num_actor_features = self.num_states + self.num_actions
+        num_actor_features = self.num_states + self.num_actions
+        num_critic_features = self.num_states
+
         
         # Initialize target policy \pi (\theta) and value function v (w) networks
-        self.actor_net = ActorNetwork(self.num_actor_features)
-        self.critic_net = CriticNetwork(self.num_critic_features)
+        self.actor_net = ActorNetwork(num_actor_features)
+        self.critic_net = CriticNetwork(num_critic_features)
         
         self.actor_optimizer = optim.Adam(self.actor_net.parameters(), lr=self.alpha_theta)
         self.critic_optimizer = optim.Adam(self.critic_net.parameters(), lr=self.alpha_w)
