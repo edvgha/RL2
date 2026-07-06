@@ -19,6 +19,7 @@ from rl2.envs import (
 )
 from rl2.actor_critic.qac import QAC
 from rl2.actor_critic.a2c import A2C
+from rl2.actor_critic.off_policy_a2c import OffPolicyA2C
 
 warnings.filterwarnings("ignore")
 
@@ -26,6 +27,7 @@ warnings.filterwarnings("ignore")
 class Control(Enum):
     QAC = "QAC"
     A2C = "A2C"
+    OFFPOLICYA2C = "OFF-POLICY-A2C"
 
 
 def plot_metrics(stats: dict, alg_name: str, env_name: str) -> None:
@@ -130,6 +132,10 @@ def evaluate(
         a2c_solver = A2C(env, num_actor_features=10, num_critic_features=6, dims=dims, max_episodes=episodes)
         optimal_policy, state_values = a2c_solver()
         stats = a2c_solver.stats
+    elif control == Control.OFFPOLICYA2C:
+        off_policy_a2c_solver = OffPolicyA2C(env, dims=dims, max_episodes=episodes)
+        optimal_policy, state_values = off_policy_a2c_solver()
+        stats = off_policy_a2c_solver.stats
 
     env.close()
 
@@ -153,7 +159,8 @@ def evaluate(
 
 def main() -> None:
     # evaluate(frozen_lake_s_env, Control.QAC, episodes=5000, dims=[8, 8])
-    evaluate(frozen_lake_s_env, Control.A2C, episodes=3000, dims=[8, 8])
+    # evaluate(frozen_lake_s_env, Control.A2C, episodes=3000, dims=[8, 8])
+    evaluate(frozen_lake_d_env, Control.OFFPOLICYA2C, episodes=3000, dims=[8, 8])
 
 
 if __name__ == "__main__":

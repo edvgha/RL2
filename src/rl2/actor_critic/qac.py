@@ -69,7 +69,6 @@ class QAC:
         self.max_steps_per_episode = max_steps_per_episode
         
         self.dims = dims 
-        self.num_features = num_features
 
         self.stats = {
             "total_rewards": [],
@@ -79,8 +78,8 @@ class QAC:
         self._parse_env(env)
         
         # Initialize Actor and Critic networks
-        self.actor_net = ActorNetwork(self.num_features)
-        self.critic_net = CriticNetwork(self.num_features)
+        self.actor_net = ActorNetwork(num_features)
+        self.critic_net = CriticNetwork(num_features)
         
         self.actor_optimizer = optim.Adam(self.actor_net.parameters(), lr=self.alpha_theta)
         self.critic_optimizer = optim.Adam(self.critic_net.parameters(), lr=self.alpha_w)

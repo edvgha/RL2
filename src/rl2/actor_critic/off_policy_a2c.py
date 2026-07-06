@@ -39,25 +39,21 @@ class CriticNetwork(nn.Module):
 
 
 # =====================================================================
-# 2. Advantage Actor-Critic (A2C) Solver
+# 2. Off-Policy A2C Solver (One-Hot Encoded + Uniform Behavior)
 # =====================================================================
-class A2C:
+class OffPolicyA2C:
     def __init__(self, 
                  env: gym.Env, 
                  dims: List[int],
-                 num_actor_features=10,
-                 num_critic_features=6,
                  gamma=0.9, 
-                 alpha_theta=0.001,
-                 alpha_w=0.001,
+                 alpha_theta=0.001,  
+                 alpha_w=0.001,      
                  max_episodes=5000, 
                  max_steps_per_episode=500):
         """
         Args:
             env (gym.Env): A Gymnasium environment (Discrete state and action spaces).
             dims (List[int]): [width, height] describing grid axes bounds.
-            num_actor_features (int): Number of action network features.
-            num_critic_features (int): Number of critic network features.
             gamma (float): Discount factor for future rewards.
             alpha_theta (float): Learning rate for Actor's PyTorch optimizer.
             alpha_w (float): Learning rate for Critic's PyTorch optimizer.
@@ -69,7 +65,6 @@ class A2C:
         self.alpha_w = alpha_w
         self.max_episodes = max_episodes
         self.max_steps_per_episode = max_steps_per_episode
-        
         self.dims = dims 
 
         self.stats = {
@@ -79,13 +74,16 @@ class A2C:
 
         self._parse_env(env)
         
-        # Initialize Actor (\theta) and Critic (w) networks
-        self.actor_net = ActorNetwork(num_actor_features)
-        self.critic_net = CriticNetwork(num_critic_features)
+        # Determine feature vector sizes based on one-hot encoding lengths
+        self.num_critic_features = self.num_states
+        self.num_actor_features = self.num_states + self.num_actions
+        
+        # Initialize target policy \pi (\theta) and value function v (w) networks
+        self.actor_net = ActorNetwork(self.num_actor_features)
+        self.critic_net = CriticNetwork(self.num_critic_features)
         
         self.actor_optimizer = optim.Adam(self.actor_net.parameters(), lr=self.alpha_theta)
         self.critic_optimizer = optim.Adam(self.critic_net.parameters(), lr=self.alpha_w)
-        self.critic_loss_fn = nn.MSELoss()
 
     def _parse_env(self, env: gym.Env):
         if not isinstance(env.observation_space, gym.spaces.Discrete):
@@ -96,50 +94,31 @@ class A2C:
         self.env = env
         self.num_states = int(env.observation_space.n) # type: ignore
         self.num_actions = int(env.action_space.n) # type: ignore
-
-    def _state_to_xy(self, state: int) -> Tuple[float, float]:
-        """Maps a 1D state ID to discrete (x, y) coordinates."""
-        y = float(state // self.dims[0])
-        x = float(state % self.dims[0])
-        return x, y
     
     def _get_actor_features(self, state: int, action: int) -> np.ndarray:
-        """Constructs the feature vector for (s, a) preferences: [1, x, y, a, x^2, y^2, a^2, xy, xa, ya]"""
-        raw_x, raw_y = self._state_to_xy(state)
+        """
+        Constructs a One-Hot encoded feature vector for the (state, action) pair.
+        Outputs a concatenation of [State Vector] + [Action Vector]
+        """
+        state_vec = np.zeros(self.num_states, dtype=float)
+        state_vec[state] = 1.0
         
-        max_x = float(self.dims[0] - 1)
-        x = 2.0 * (raw_x / max_x) - 1.0 if max_x > 0 else 0.0
+        action_vec = np.zeros(self.num_actions, dtype=float)
+        action_vec[action] = 1.0
         
-        max_y = float(self.dims[1] - 1)
-        y = 2.0 * (raw_y / max_y) - 1.0 if max_y > 0 else 0.0
-        
-        max_a = float(self.num_actions - 1)
-        a = 2.0 * (float(action) / max_a) - 1.0 if max_a > 0 else 0.0
-        
-        features = np.array([
-            1.0, x, y, a, x**2, y**2, a**2, x * y, x * a, y * a
-        ], dtype=float)
-        
-        return features
+        return np.concatenate([state_vec, action_vec])
 
     def _get_critic_features(self, state: int) -> np.ndarray:
-        """Constructs the pure state feature vector for v(s, w): [1, x, y, x^2, y^2, xy]"""
-        raw_x, raw_y = self._state_to_xy(state)
+        """
+        Constructs a pure One-Hot encoded state feature vector for v(s, w).
+        """
+        state_vec = np.zeros(self.num_states, dtype=float)
+        state_vec[state] = 1.0
         
-        max_x = float(self.dims[0] - 1)
-        x = 2.0 * (raw_x / max_x) - 1.0 if max_x > 0 else 0.0
-        
-        max_y = float(self.dims[1] - 1)
-        y = 2.0 * (raw_y / max_y) - 1.0 if max_y > 0 else 0.0
-        
-        features = np.array([
-            1.0, x, y, x**2, y**2, x * y
-        ], dtype=float)
-        
-        return features
+        return state_vec
 
-    def _get_action_probs(self, state: int) -> torch.Tensor:
-        """Calculates \pi(a|s, \theta) distribution for all actions."""
+    def _get_target_action_probs(self, state: int) -> torch.Tensor:
+        """Calculates Target Policy \pi(a|s, \theta) distribution for all actions."""
         features_list = [self._get_actor_features(state, a) for a in range(self.num_actions)]
         features_tensor = torch.FloatTensor(np.array(features_list))
         
@@ -158,7 +137,7 @@ class A2C:
         optimal_policy = np.zeros(self.num_states, dtype=int)
         for s in range(self.num_states):
             with torch.no_grad():
-                probs = self._get_action_probs(s)
+                probs = self._get_target_action_probs(s)
                 optimal_policy[s] = torch.argmax(probs).item()
         return optimal_policy
 
@@ -177,16 +156,18 @@ class A2C:
             state_values (np.ndarray): Shape: (num_states,)
         """
         k = 0
+        
+        # Behavior Policy \beta(a|s) is Uniform for all states
+        beta_prob = 1.0 / self.num_actions
+
         while k < self.max_episodes:
             total_reward, episode_length = 0.0, 0
             
             s_t, _ = self.env.reset()
             
             for _ in range(self.max_steps_per_episode):
-                # 1. Sample action WITHOUT building a computation graph to prevent in-place errors
-                with torch.no_grad():
-                    probs = self._get_action_probs(s_t)
-                    a_t = Categorical(probs).sample().item()
+                # 1. Generate a_t following Behavior Policy \beta(s_t) uniformly
+                a_t = int(np.random.choice(self.num_actions))
                 
                 # Observe r_{t+1}, s_{t+1}
                 s_tp1, r_tp1, terminated, truncated, _ = self.env.step(a_t)
@@ -195,10 +176,16 @@ class A2C:
                 total_reward += float(r_tp1)
                 episode_length += 1
                 
-                # We calculate the log_prob of a_t using the fresh Actor network weights
-                probs_current = self._get_action_probs(s_t)
+                # --- ATTACH TARGET POLICY COMPUTATION GRAPH ---
+                # Calculate \pi(a_t|s_t, \theta_t) using the current Target Actor network
+                probs_current = self._get_target_action_probs(s_t)
                 m_current = Categorical(probs_current)
+                
+                pi_prob = probs_current[a_t]
                 log_prob = m_current.log_prob(torch.tensor(a_t))
+
+                # Importance Sampling Ratio: \pi(a_t|s_t, \theta_t) / \beta(a_t|s_t)
+                rho_t = (pi_prob / beta_prob).detach()
 
                 # Calculate current and next V-values using the Critic Network
                 v_current = self._get_state_value_tensor(s_t)
@@ -217,15 +204,15 @@ class A2C:
                 delta = target_v - v_current.detach()
 
                 # --- 3. Actor Update (\theta) ---
-                # Objective: Maximize \delta_t * \ln \pi(a_t|s_t, \theta_t)
-                actor_loss = -log_prob * delta 
+                # Objective: Maximize \rho_t * \delta_t * \ln \pi(a_t|s_t, \theta_t)
+                actor_loss = -(rho_t * delta * log_prob)
                 self.actor_optimizer.zero_grad()
                 actor_loss.backward()
                 self.actor_optimizer.step()
 
                 # --- 4. Critic Update (w) ---
-                # Objective: Minimize TD Error [r_{t+1} + \gamma * v_{t+1} - v_t]^2
-                critic_loss = self.critic_loss_fn(v_current, target_v)
+                # Objective: Minimize \rho_t * [r_{t+1} + \gamma * v_{t+1} - v_t]^2
+                critic_loss = rho_t * (target_v - v_current) ** 2
                 self.critic_optimizer.zero_grad()
                 critic_loss.backward()
                 self.critic_optimizer.step()
@@ -240,7 +227,7 @@ class A2C:
             self.stats["episode_lengths"].append(episode_length)
             k += 1
 
-        print(f"A2C optimization finished after {k} episodes | Total R: {sum(self.stats['total_rewards'])}")
+        print(f"Off-Policy A2C (One-Hot + Uniform Behavior) optimization finished after {k} episodes.")
         
         optimal_policy = self._extract_optimal_policy()
         state_values = self._extract_state_values()
