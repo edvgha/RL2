@@ -1,143 +1,148 @@
-"""
-Q-Learning (off-policy TD(0)) and Double-Q-Learning.
+from typing import Tuple, List, Dict
+import numpy as np
+import gymnasium as gym
 
-Q-Learning:
-    ε > 0, α ∈ (0, 1]
-    Init Q(S, A), Q(terminal, *) = 0
+class QLearning:
+    def __init__(self, env: gym.Env, gamma=0.9, alpha=0.1, epsilon=1.0, decay_rate=0.001, min_epsilon=0.01, max_episodes=5000, max_steps_per_episode=500):
+        """
+        Args:
+            env (gym.Env): A Gymnasium environment (must use Discrete state and action spaces).
+            gamma (float): Discount factor for future rewards.
+            alpha (float): Constant learning rate \alpha_t(s,a) = \alpha > 0.
+            epsilon (float): Initial exploration parameter \epsilon \in (0, 1).
+            decay_rate (float): Exponential decay rate applied to epsilon after each episode.
+            min_epsilon (float): Floor boundary threshold for epsilon decay.
+            max_episodes (int): Safety cap to prevent infinite loops (corresponds to total loops).
+            max_steps_per_episode (int): Maximum length T of a single generated episode.
+        """
+        self.gamma = gamma
+        self.alpha = alpha
+        self.epsilon = epsilon
+        self.decay_rate = decay_rate
+        self.min_epsilon = min_epsilon
+        self.max_episodes = max_episodes
+        self.max_steps_per_episode = max_steps_per_episode
 
-    Loop for each episode:
-        Initialize S
-        Loop for each step of episode:
-            Choose A from S using policy derived from Q (e.g. ε-greedy)
-            Take action A, observe R, S'
-            Q(S, A) <- Q(S, A) + α [R + γ max_a Q(S', a) - Q(S, A)]
-            S <- S'
-        Until S is terminal
+        self.stats = {
+            "total_rewards": [],
+            "episode_lengths": []
+        }
 
-Double-Q-Learning:
-    Init Q1(S, A), Q2(S, A), both = 0
+        self._parse_env(env)
 
-    Loop for each episode:
-        Initialize S
-        Loop for each step of episode:
-            Choose A from S using policy derived from Q1 + Q2 (e.g. ε-greedy)
-            Take action A, observe R, S'
-            With prob. 0.5:
-                Q1(S, A) <- Q1(S, A) + α [R + γ Q2(S', argmax_a Q1(S', a)) - Q1(S, A)]
+        self.state_values = np.zeros(self.num_states, dtype=float)
+
+    def _parse_env(self, env: gym.Env):
+        # 1. Verify space compatibility
+        if not isinstance(env.observation_space, gym.spaces.Discrete):
+            raise TypeError("Observation space must be a gymnasium.spaces.Discrete space.")
+        if not isinstance(env.action_space, gym.spaces.Discrete):
+            raise TypeError("Action space must be a gymnasium.spaces.Discrete space.")
+            
+        self.env = env
+        self.num_states = int(env.observation_space.n) # type: ignore
+        self.num_actions = int(env.action_space.n) # type: ignore
+
+    def _update_policy_profile(self, pi: np.ndarray, q: np.ndarray, s: int):
+        if np.all(q[s, :] == q[s, 0]):
+            return pi
+        
+        a_star = np.argmax(q[s, :])
+        num_A = self.num_actions
+        
+        for a in range(num_A):
+            if a == a_star:
+                # \pi_{t+1}(a|s_t) = 1 - (\epsilon * (|A(s_t)| - 1)) / |A(s_t)|
+                pi[s, a] = 1.0 - ((self.epsilon * (num_A - 1)) / num_A)
             else:
-                Q2(S, A) <- Q2(S, A) + α [R + γ Q1(S', argmax_a Q2(S', a)) - Q2(S, A)]
-            S <- S'
-        Until S is terminal
+                # \pi_{t+1}(a|s_t) = \epsilon / |A(s_t)|
+                pi[s, a] = self.epsilon / num_A
+        return pi
 
-The per-step TD updates are pure jit-compiled functions; the per-episode
-loop stays in Python because Gymnasium env.step is impure.
-"""
-from __future__ import annotations
+    def _extract_optimal_policy(self, q: np.ndarray) -> np.ndarray:
+        """
+        q (np.ndarray): State-action value matrix. Shape: (num_states, num_actions)
 
-from enum import Enum
-from typing import Any, Dict, Tuple
+        Returns:
+            optimal_policy (np.ndarray): Optimal deterministic policy. Shape: (num_states,)
+        """
+        optimal_policy = np.zeros(self.num_states, dtype=int)
+        
+        for s in range(self.num_states):
+            optimal_policy[s] = np.argmax(q[s, :])
+        return optimal_policy
+    
+    def _extract_state_values(self, q: np.ndarray) -> np.ndarray:
+        """
+        q (np.ndarray): State-action value matrix. Shape: (num_states, num_actions)
 
-import jax
-import jax.numpy as jnp
+        Returns:
+            state_values (np.ndarray): The maximum value for each state V(s) = max_a Q(s, a). Shape: (num_states,)
+        """
+        
+        for s in range(self.num_states):
+            self.state_values[s] = np.max(q[s, :])
+        return self.state_values
 
-from .exploration import epsilon_at, epsilon_greedy
+    def __call__(self) -> np.ndarray:
+        """
+        Returns:
+            policy (np.ndarray): Optimal deterministic policy map [s] -> best action index. Shape: (num_states,)
+        """
+        # Initial q_0(s,a) for all (s,a) initialized to zeros
+        q = np.zeros((self.num_states, self.num_actions))
+        
+        # Initial \epsilon-greedy policy \pi_0 derived from q_0
+        pi = np.zeros((self.num_states, self.num_actions))
+        for s in range(self.num_states):
+            for a in range(self.num_actions):
+                pi[s, a] = 1. / self.num_actions
 
+        k = 0
+        while k < self.max_episodes:
+            total_reward, episode_length = 0.0, 0
+            
+            s_t, _ = self.env.reset()
+            
+            for _ in range(self.max_steps_per_episode):
+                # **Collect** an experience sample (a_t, r_{t+1}, s_{t+1}) given s_t:
+                # Generate a_t following \pi_t(s_t)
+                a_t = np.random.choice(self.num_actions, p=pi[s_t])
+                
+                # Generate r_{t+1}, s_{t+1} by interacting with the environment
+                s_tp1, r_tp1, terminated, truncated, _ = self.env.step(a_t)
+                
+                # Track metrics data
+                total_reward += float(r_tp1)
+                episode_length += 1
+                
+                # Update q-value for (s_t, a_t):
+                # q_{t+1}(s_t,a_t) = q_t(s_t,a_t) - \alpha_t(s_t,a_t) * [q_t(s_t,a_t) - (r_{t+1} + \gamma * \max_a q_t(s_{t+1},a))]
+                # Note: if s_tp1 is terminal, future expected max value becomes 0.0
+                future_val = 0.0 if terminated else np.max(q[s_tp1, :])
+                q[s_t, a_t] = q[s_t, a_t] - self.alpha * (q[s_t, a_t] - (float(r_tp1) + self.gamma * future_val))
+                
+                # Update policy for s_t
+                pi = self._update_policy_profile(pi, q, s_t)
+                
+                if terminated or truncated:
+                    break
+                    
+                # Transition: s_t <- s_{t+1}
+                s_t = s_tp1
 
-class QLearningType(Enum):
-    QLEARNING = "Q-Learning"
-    DOUBLEQLEARNING = "Double-Q-Learning"
+            # Log metrics per completed episode loop
+            self.stats["total_rewards"].append(total_reward)
+            self.stats["episode_lengths"].append(episode_length)
+            
+            # Decay epsilon after processing the episode timeline
+            self.epsilon = max(self.epsilon * np.exp(-self.decay_rate), self.min_epsilon)
+            
+            k += 1
 
-
-@jax.jit
-def q_learning_update(Q, state, action, reward, next_state, done, alpha, gamma):
-    """Q(s,a) <- Q(s,a) + alpha [r + gamma * max_{a'} Q(s',a') - Q(s,a)]."""
-    target = reward + gamma * jnp.max(Q[next_state]) * (1.0 - done)
-    td_error = target - Q[state, action]
-    return Q.at[state, action].add(alpha * td_error)
-
-
-@jax.jit
-def double_q_learning_update(Q1, Q2, key, state, action, reward, next_state, done, alpha, gamma):
-    """Flip a coin: update Q1 using Q2's value at Q1's argmax, or vice versa."""
-    flip = jax.random.uniform(key) < 0.5
-
-    def update_first(qs):
-        Q1, Q2 = qs
-        best = jnp.argmax(Q1[next_state])
-        target = reward + gamma * Q2[next_state, best] * (1.0 - done)
-        td = target - Q1[state, action]
-        return Q1.at[state, action].add(alpha * td), Q2
-
-    def update_second(qs):
-        Q1, Q2 = qs
-        best = jnp.argmax(Q2[next_state])
-        target = reward + gamma * Q1[next_state, best] * (1.0 - done)
-        td = target - Q2[state, action]
-        return Q1, Q2.at[state, action].add(alpha * td)
-
-    return jax.lax.cond(flip, update_first, update_second, (Q1, Q2))
-
-
-def fit_q_learning(
-    env,
-    qtype: QLearningType,
-    *,
-    episodes: int,
-    alpha: float,
-    gamma: float,
-    epsilon: float,
-    epsilon_min: float,
-    decay_rate: float,
-    seed: int = 0,
-) -> Tuple[jnp.ndarray, jnp.ndarray, Dict[str, Any]]:
-    """Train tabular (Double-)Q-Learning. Returns (Q-table, greedy policy, history)."""
-    n_states = env.observation_space.n
-    n_actions = env.action_space.n
-    Q1 = jnp.zeros((n_states, n_actions))
-    Q2 = jnp.zeros((n_states, n_actions)) if qtype == QLearningType.DOUBLEQLEARNING else None
-
-    key = jax.random.PRNGKey(seed)
-    alpha_a = jnp.float32(alpha)
-    gamma_a = jnp.float32(gamma)
-    history = {"episode_rewards": [], "episode_lengths": [], "epsilons": []}
-
-    for episode in range(episodes):
-        eps = float(epsilon_at(jnp.float32(episode), epsilon, epsilon_min, decay_rate))
-        state, _ = env.reset()
-        done = False
-        truncated = False
-        total_reward = 0.0
-        steps = 0
-
-        while not (done or truncated):
-            key, action_key = jax.random.split(key)
-            q_for_action = (Q1 + Q2)[state] if qtype == QLearningType.DOUBLEQLEARNING else Q1[state]
-            action = int(epsilon_greedy(action_key, q_for_action, eps))
-
-            next_state, reward, done, truncated, _ = env.step(action)
-            done_f = float(done or truncated)
-
-            s, a, ns = jnp.int32(state), jnp.int32(action), jnp.int32(next_state)
-            r = jnp.float32(reward)
-            d = jnp.float32(done_f)
-
-            if qtype == QLearningType.DOUBLEQLEARNING:
-                key, upd_key = jax.random.split(key)
-                Q1, Q2 = double_q_learning_update(Q1, Q2, upd_key, s, a, r, ns, d, alpha_a, gamma_a)
-            else:
-                Q1 = q_learning_update(Q1, s, a, r, ns, d, alpha_a, gamma_a)
-
-            state = next_state
-            total_reward += float(reward)
-            steps += 1
-
-        history["episode_rewards"].append(total_reward)
-        history["episode_lengths"].append(steps)
-        history["epsilons"].append(eps)
-
-    if qtype == QLearningType.DOUBLEQLEARNING:
-        Q = Q1 + Q2
-    else:
-        Q = Q1
-    policy = jnp.argmax(Q, axis=1).astype(jnp.int32)
-    return Q, policy, history
+        print(f"Q-Learning optimization algorithm completed execution after {k} episodes.")
+        
+        optimal_policy = self._extract_optimal_policy(q)
+        self._extract_state_values(q)
+            
+        return optimal_policy
