@@ -17,8 +17,8 @@ from rl2.envs import (
     frozen_lake_d_small_env,
     taxi_env,
 )
-from rl2.model_free.sarsa2 import Sarsa
-from rl2.model_free.q_learning2 import QLearning
+from rl2.model_free.sarsa import Sarsa
+from rl2.model_free.q_learning import QLearning
 
 warnings.filterwarnings("ignore")
 

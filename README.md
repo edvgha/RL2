@@ -62,7 +62,7 @@ uv sync
 ```
 
 `uv sync` creates `.venv/` and installs locked dependencies from `uv.lock`
-(JAX, Gymnasium, Matplotlib, Pygame).
+(Gymnasium, Matplotlib, Pygame, PyTorch).
 
 ## Running
 
