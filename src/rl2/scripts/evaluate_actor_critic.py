@@ -20,6 +20,8 @@ from rl2.envs import (
 from rl2.actor_critic.qac import QAC
 from rl2.actor_critic.a2c import A2C
 from rl2.actor_critic.off_policy_a2c import OffPolicyA2C
+from rl2.actor_critic.deterministic_actor_critic import DeterministicActorCritic
+from rl2.actor_critic.deterministic_actor_critic_2 import DPG
 
 warnings.filterwarnings("ignore")
 
@@ -29,6 +31,9 @@ class Control(Enum):
     A2C = "A2C"
     A2COH = "A2C-OH"
     OFFPOLICYA2C = "OFF-POLICY-A2C"
+    DETERMINISTIC_ACTOR_CRITIC = "DETERMINISTIC-ACTOR-CRITIC"
+    DETERMINISTIC_ACTOR_CRITIC_2 = "DETERMINISTIC-ACTOR-CRITIC-2"
+
 
 
 def plot_metrics(stats: dict, alg_name: str, env_name: str) -> None:
@@ -141,6 +146,14 @@ def evaluate(
         off_policy_a2c_solver = OffPolicyA2C(env, max_episodes=episodes)
         optimal_policy, state_values = off_policy_a2c_solver()
         stats = off_policy_a2c_solver.stats
+    elif control == Control.DETERMINISTIC_ACTOR_CRITIC:
+        discrete_policy_a2c_solver = DeterministicActorCritic(env, dims=dims, max_episodes=episodes)
+        optimal_policy, state_values = discrete_policy_a2c_solver()
+        stats = discrete_policy_a2c_solver.stats
+    elif control == Control.DETERMINISTIC_ACTOR_CRITIC_2:
+            dpg_solver = DPG(env, dims=dims, max_episodes=episodes)
+            optimal_policy, state_values = dpg_solver()
+            stats = dpg_solver.stats
 
     env.close()
 
@@ -165,8 +178,10 @@ def evaluate(
 def main() -> None:
     # evaluate(frozen_lake_s_env, Control.QAC, episodes=5000, dims=[8, 8])
     # evaluate(frozen_lake_s_env, Control.A2C, episodes=3000, dims=[8, 8])
-    evaluate(frozen_lake_s_env, Control.A2COH, episodes=300, dims=[8, 8])
+    # evaluate(frozen_lake_s_env, Control.A2COH, episodes=300, dims=[8, 8])
     # evaluate(frozen_lake_s_env, Control.OFFPOLICYA2C, episodes=3000, dims=[8, 8])
+    # evaluate(frozen_lake_d_env, Control.DETERMINISTIC_ACTOR_CRITIC, episodes=5000, dims=[8, 8])
+    evaluate(frozen_lake_d_env, Control.DETERMINISTIC_ACTOR_CRITIC_2, episodes=1000, dims=[8, 8])
 
 
 if __name__ == "__main__":
